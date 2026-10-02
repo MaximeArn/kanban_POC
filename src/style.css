@@ -1,0 +1,94 @@
+/* Jetons de thème et base globale. Les styles des composants sont en scoped. */
+:root {
+  --text: #3f4a44;
+  --text-h: #0b1510;
+  --text-muted: #5f6b64;
+  --bg: #fff;
+  --surface: #fff;
+  --surface-2: #f2f5f3;
+  --column-bg: #e8ede9;
+  --border: #c5cec8;
+  /* Séparateur des colonnes à l'intérieur des lignes du board. */
+  --grid-line: #d3dbd6;
+  /* Barre de titre des lignes du board (hors « En retard » et semaine en cours). */
+  --lane-bar-bg: #eff3f0;
+  /* Une colonne sur deux, pour suivre une étape d'une ligne à l'autre. */
+  --column-stripe: #f1f5f2;
+  /* Hachures des zones de dépôt interdites pendant un glisser. */
+  --hatch: rgba(63, 74, 68, 0.16);
+  --accent: #166534;
+  --on-accent: #fff;
+  --accent-bg: rgba(22, 101, 52, 0.1);
+  --accent-border: rgba(22, 101, 52, 0.5);
+  --formel: #0b5cad;
+  --formel-bg: #dcebfb;
+  --declaratif: #8a4b00;
+  --declaratif-bg: #fdecd3;
+  --warning: #b42318;
+  --warning-bg: #fde4e1;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 20, 0.05), 0 1px 1px rgba(16, 24, 20, 0.03);
+  --shadow-md: 0 6px 16px -4px rgba(16, 24, 20, 0.12), 0 2px 4px -2px rgba(16, 24, 20, 0.06);
+
+  /* Couleurs des architectes (initiales), distinctes des badges, du retard et de l'accent. */
+  --person-0: #0e7490;
+  --person-1: #4d7c0f;
+  --person-2: #be185d;
+  --person-3: #1d4ed8;
+  --person-4: #c2410c;
+  --person-5: #a16207;
+  --on-person: #fff;
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+
+  font: 16px/1.45 var(--sans);
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #c5ccc8;
+    --text-h: #f1f5f3;
+    --text-muted: #9aa5a0;
+    --bg: #141917;
+    --surface: #1f2622;
+    --surface-2: #27302b;
+    --column-bg: #1a201d;
+    --border: #3f4d46;
+    --grid-line: #34413a;
+    --lane-bar-bg: #252e29;
+    --column-stripe: #232b27;
+    --hatch: rgba(241, 245, 243, 0.09);
+    --accent: #4ade80;
+    --on-accent: #0b1510;
+    --accent-bg: rgba(74, 222, 128, 0.15);
+    --accent-border: rgba(74, 222, 128, 0.5);
+    --formel: #93c5fd;
+    --formel-bg: rgba(59, 130, 246, 0.2);
+    --declaratif: #fcd34d;
+    --declaratif-bg: rgba(245, 158, 11, 0.18);
+    --warning: #fca5a5;
+    --warning-bg: rgba(239, 68, 68, 0.18);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+
+    --person-0: #67e8f9;
+    --person-1: #bef264;
+    --person-2: #f9a8d4;
+    --person-3: #93c5fd;
+    --person-4: #fdba74;
+    --person-5: #fcd34d;
+    --on-person: #0b1510;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
