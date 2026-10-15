@@ -1,4 +1,8 @@
 <script setup lang="ts">
+/**
+ * Contenu du drawer d'une DDS (avancement, jalons, informations, historique), affiché dans
+ * le drawer générique UiDrawer par DdsDrawer.
+ */
 import {
 	STAGES,
 	availableMoves,
@@ -23,7 +27,6 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-	close: [];
 	move: [id: string, target: StageId];
 	/** Nouveau J0.8, `YYYY-MM-DD` : posé directement, ou décalé après saisie du motif. */
 	reschedule: [id: string, date: string];
@@ -34,7 +37,8 @@ const emit = defineEmits<{
 	urgence: [id: string, urgent: boolean, motif: string | null];
 }>();
 
-const title = ref<HTMLElement | null>(null);
+/** Drawer générique (UiDrawer) qui affiche ce contenu : focus sur son titre. */
+const drawer = inject(DRAWER_CONTEXT, null);
 const dateInput = ref<HTMLInputElement | null>(null);
 
 const moves = computed(() => availableMoves(props.dossier, props.today));
@@ -142,18 +146,15 @@ const timeline = computed(() =>
 		.reverse(),
 );
 
-// Focus sur le titre à l'ouverture et à chaque changement de dossier.
+// Changement de dossier : les saisies en cours (attente, urgence) sont abandonnées.
 watch(
 	() => props.dossier.id,
-	async () => {
+	() => {
 		holdOpen.value = false;
 		holdMotif.value = '';
 		urgenceOpen.value = false;
 		urgenceMotif.value = '';
-		await nextTick();
-		title.value?.focus();
 	},
-	{ immediate: true },
 );
 
 async function moveTo(option: MoveOption) {
@@ -162,7 +163,7 @@ async function moveTo(option: MoveOption) {
 
 	// Si le bouton actionné devient désactivé, le focus retombe sur <body> : on le garde dans le drawer.
 	await nextTick();
-	if (document.activeElement === document.body) title.value?.focus();
+	if (document.activeElement === document.body) drawer?.focusTitle();
 }
 
 function ouiNon(value: boolean | null): string {
@@ -207,28 +208,7 @@ function describeEvent(event: HistoryEvent): { label: string; detail?: string } 
 </script>
 
 <template>
-	<aside class="drawer" aria-labelledby="drawer-title" @keydown.esc.stop="emit('close')">
-		<header class="drawer-header">
-			<div class="drawer-meta">
-				<span class="drawer-id">{{ dossier.id }}</span>
-				<span v-if="dossier.urgent" class="badge badge-urgent">Urgente</span>
-				<span v-if="dossier.fas" class="badge badge-fas">FAS</span>
-				<span v-if="dossier.attente" class="badge badge-hold">En attente</span>
-			</div>
-			<button
-				type="button"
-				class="drawer-close"
-				aria-label="Fermer le détail de la DDS"
-				@click="emit('close')"
-			>
-				✕
-			</button>
-			<h2 id="drawer-title" ref="title" class="drawer-title" tabindex="-1">
-				{{ dossier.titre }}
-			</h2>
-		</header>
-
-		<div class="drawer-body">
+	<div class="drawer-content">
 			<!-- J0.8 dépassé sans CSDA tenu : anomalie de données (spec, règle H9). -->
 			<div v-if="delay > 0" class="alert alert-danger" role="note">
 				<span class="ms alert-icon" aria-hidden="true">warning</span>
@@ -585,83 +565,10 @@ function describeEvent(event: HistoryEvent): { label: string; detail?: string } 
 				<h3 id="drawer-comments" class="section-title">Commentaires</h3>
 				<p class="muted">L’ajout de commentaires arrivera dans une prochaine version.</p>
 			</section>
-		</div>
-	</aside>
+	</div>
 </template>
 
 <style scoped>
-/* Superposé au board, sur toute la hauteur du viewport : aucun décalage des colonnes. */
-.drawer {
-	position: fixed;
-	z-index: 10;
-	top: 0;
-	right: 0;
-	bottom: 0;
-	display: flex;
-	flex-direction: column;
-	width: min(600px, 100vw);
-	background: var(--surface);
-	border-left: 1px solid var(--border);
-	box-shadow: var(--shadow-md);
-}
-
-.drawer-header {
-	display: grid;
-	grid-template-columns: 1fr auto;
-	gap: 6px 12px;
-	padding: 16px 20px 14px;
-	border-bottom: 1px solid var(--border);
-}
-
-.drawer-meta {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-
-.drawer-id {
-	font-family: var(--mono);
-	font-size: 0.8125rem;
-	color: var(--text-muted);
-}
-
-.drawer-close {
-	width: 32px;
-	height: 32px;
-	border: 1px solid transparent;
-	border-radius: 6px;
-	background: none;
-	color: var(--text);
-	font-size: 1rem;
-	cursor: pointer;
-}
-
-.drawer-close:hover {
-	border-color: var(--border);
-	color: var(--text-h);
-}
-
-.drawer-title {
-	grid-column: 1 / -1;
-	margin: 0;
-	font-family: var(--title);
-	font-size: 1.25rem;
-	line-height: 1.3;
-	color: var(--bleu-700);
-}
-
-.drawer-title:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
-	border-radius: 2px;
-}
-
-.drawer-body {
-	flex: 1;
-	overflow-y: auto;
-	padding: 4px 20px 24px;
-}
-
 .section {
 	padding: 16px 0;
 	border-bottom: 1px solid var(--border);
@@ -678,25 +585,6 @@ function describeEvent(event: HistoryEvent): { label: string; detail?: string } 
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
 	color: var(--text-muted);
-}
-
-.badge {
-	padding: 1px 8px;
-	border-radius: 999px;
-	font-size: 0.6875rem;
-	font-weight: 600;
-	letter-spacing: 0.02em;
-	text-transform: uppercase;
-}
-
-.badge-fas {
-	color: var(--declaratif);
-	background: var(--declaratif-bg);
-}
-
-.badge-urgent {
-	color: #fff;
-	background: var(--alerte);
 }
 
 .progress-label {
@@ -752,8 +640,7 @@ function describeEvent(event: HistoryEvent): { label: string; detail?: string } 
 	border-color: var(--accent);
 }
 
-.btn:focus-visible,
-.drawer-close:focus-visible {
+.btn:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
 }
@@ -941,11 +828,6 @@ function describeEvent(event: HistoryEvent): { label: string; detail?: string } 
 .timeline-detail {
 	font-size: 0.8125rem;
 	color: var(--text-muted);
-}
-
-.badge-hold {
-	color: var(--vigilance-fg);
-	background: var(--vigilance-soft);
 }
 
 /* Bandeaux en tête de fiche : anomalie (rouge) et mise en attente (orange), comme la maquette. */

@@ -244,13 +244,13 @@ const HINTS: Record<LaneKind, string> = {
 
 .lane-cells {
 	display: grid;
-	/* Pistes partagées avec la barre des titres (cf. KanbanBoard, filtre Phase). */
+	/* Pistes partagées avec la barre des titres (cf. Board, filtre Phase). */
 	grid-template-columns: var(--board-columns);
 	align-items: stretch;
 }
 
 /*
- * Archive « Terminés » : son contenu (cf. KanbanBoard) n'utilise pas les colonnes.
+ * Archive « Terminés » : son contenu (cf. Board) n'utilise pas les colonnes.
  */
 .is-done .lane-cells {
 	display: block;

@@ -66,8 +66,6 @@ const SECTIONS: Record<Requirement, { title: string; text: string }> = {
   motif: { title: 'Abandon', text: 'Le motif est obligatoire et sera conservé dans l’historique.' },
 }
 
-const dialog = ref<HTMLDialogElement | null>(null)
-
 const has = (requirement: Requirement) => props.requirements.includes(requirement)
 
 const j08 = ref(props.proposedDate ?? '')
@@ -164,213 +162,154 @@ const answer = computed<PendingAnswer | null>(() => {
   return result
 })
 
-// showModal() : fond inerte, focus piégé dans la modale, Échap = événement `cancel`.
-onMounted(() => dialog.value?.showModal())
-
 function confirm() {
-  if (!answer.value) return
-  const value = answer.value
-  dialog.value?.close()
-  emit('confirm', value)
-}
-
-function cancel() {
-  dialog.value?.close()
-  emit('cancel')
-}
-
-/** Clic sur le fond : la cible est le <dialog> lui-même, le contenu étant dans le <form>. */
-function onDialogClick(event: MouseEvent) {
-  if (event.target === dialog.value) cancel()
+  if (answer.value) emit('confirm', answer.value)
 }
 </script>
 
 <template>
-  <dialog
-    ref="dialog"
-    class="modal"
-    aria-labelledby="pending-modal-title"
-    aria-describedby="pending-modal-subject"
-    @cancel.prevent="cancel"
-    @click="onDialogClick"
-  >
-    <form class="modal-body" @submit.prevent="confirm">
-      <header class="modal-header">
-        <h2 id="pending-modal-title" class="modal-title">{{ title }}</h2>
-        <p id="pending-modal-subject" class="modal-subject">
-          <span class="modal-id">{{ dossier.id }}</span> {{ dossier.titre }}
+  <UiModal @submit="confirm" @cancel="$emit('cancel')">
+    <template #title>{{ title }}</template>
+
+    <template #description>
+      <p class="modal-subject">
+        <span class="modal-id">{{ dossier.id }}</span> {{ dossier.titre }}
+      </p>
+      <p v-if="stageChange" class="modal-transition">
+        « {{ fromLabel }} » <span aria-hidden="true">→</span><span class="sr-only">vers</span> « {{ targetLabel }} »
+      </p>
+    </template>
+
+    <section
+      v-for="requirement in requirements"
+      :key="requirement"
+      class="modal-section"
+      :class="{ 'is-danger': requirement === 'motif' }"
+      :aria-labelledby="`rule-${requirement}`"
+    >
+      <h3 :id="`rule-${requirement}`" class="section-heading">
+        <span class="chip">Règle</span>
+        {{ SECTIONS[requirement].title }}
+      </h3>
+      <p class="section-text">{{ SECTIONS[requirement].text }}</p>
+
+      <label v-if="requirement === 'j08'" class="field">
+        <span>Jalon J0.8</span>
+        <input v-model="j08" type="date" :min="today" required />
+      </label>
+
+      <template v-else-if="requirement === 'decalage'">
+        <p class="section-facts">
+          J0.8 actuel : <strong>{{ dossier.j08 ? formatDate(dossier.j08) : '—' }}</strong>
+          <template v-if="dossier.j08Initial && dossier.j08Initial !== dossier.j08">
+            · initial : <strong>{{ formatDate(dossier.j08Initial) }}</strong>
+          </template>
         </p>
-        <p v-if="stageChange" class="modal-transition">
-          « {{ fromLabel }} » <span aria-hidden="true">→</span><span class="sr-only">vers</span> « {{ targetLabel }} »
-        </p>
-      </header>
-
-      <section
-        v-for="requirement in requirements"
-        :key="requirement"
-        class="modal-section"
-        :class="{ 'is-danger': requirement === 'motif' }"
-        :aria-labelledby="`rule-${requirement}`"
-      >
-        <h3 :id="`rule-${requirement}`" class="section-heading">
-          <span class="chip">Règle</span>
-          {{ SECTIONS[requirement].title }}
-        </h3>
-        <p class="section-text">{{ SECTIONS[requirement].text }}</p>
-
-        <label v-if="requirement === 'j08'" class="field">
-          <span>Jalon J0.8</span>
-          <input v-model="j08" type="date" :min="today" required />
-        </label>
-
-        <template v-else-if="requirement === 'decalage'">
-          <p class="section-facts">
-            J0.8 actuel : <strong>{{ dossier.j08 ? formatDate(dossier.j08) : '—' }}</strong>
-            <template v-if="dossier.j08Initial && dossier.j08Initial !== dossier.j08">
-              · initial : <strong>{{ formatDate(dossier.j08Initial) }}</strong>
-            </template>
-          </p>
-          <div class="field-row">
-            <label class="field">
-              <span>Nouvelle date</span>
-              <input v-model="decalageDate" type="date" :min="today" required />
-            </label>
-            <label class="field">
-              <span>Porteur</span>
-              <select v-model="decalagePorteur" required>
-                <option value="" disabled>Choisir…</option>
-                <option v-for="porteur in PORTEURS_DECALAGE" :key="porteur" :value="porteur">{{ porteur }}</option>
-              </select>
-            </label>
-          </div>
+        <div class="field-row">
           <label class="field">
-            <span>Motif</span>
-            <select v-model="decalageMotif" required>
-              <option value="" disabled>Choisir un motif…</option>
-              <option v-for="item in MOTIFS_DECALAGE" :key="item" :value="item">{{ item }}</option>
+            <span>Nouvelle date</span>
+            <input v-model="decalageDate" type="date" :min="today" required />
+          </label>
+          <label class="field">
+            <span>Porteur</span>
+            <select v-model="decalagePorteur" required>
+              <option value="" disabled>Choisir…</option>
+              <option v-for="porteur in PORTEURS_DECALAGE" :key="porteur" :value="porteur">{{ porteur }}</option>
             </select>
           </label>
-          <label class="field">
-            <span>Commentaire <em>(facultatif)</em></span>
-            <textarea v-model="decalageCommentaire" rows="2" />
-          </label>
-        </template>
-
-        <div v-else-if="requirement === 'kickoff'" class="field-row">
-          <label class="field">
-            <span>Date du kick-off</span>
-            <input v-model="kickoffDate" type="date" required />
-          </label>
-          <label class="field">
-            <span>Interlocuteur DS</span>
-            <input v-model="interlocuteurDs" type="text" list="interlocuteurs-ds" placeholder="Nom…" required />
-            <datalist id="interlocuteurs-ds">
-              <option v-for="name in INTERLOCUTEURS_DS" :key="name" :value="name" />
-            </datalist>
-          </label>
         </div>
-
-        <div v-else-if="requirement === 'cadrage'" class="field-row">
-          <fieldset class="choice-group">
-            <legend>Cadrage technique</legend>
-            <label class="choice"><input v-model="cadrageTechnique" type="radio" :value="true" /> Oui</label>
-            <label class="choice"><input v-model="cadrageTechnique" type="radio" :value="false" /> Non</label>
-          </fieldset>
-          <fieldset class="choice-group">
-            <legend>Cadrage sécurité</legend>
-            <label class="choice"><input v-model="cadrageSecurite" type="radio" :value="true" /> Oui</label>
-            <label class="choice"><input v-model="cadrageSecurite" type="radio" :value="false" /> Non</label>
-          </fieldset>
-        </div>
-
-        <label v-else-if="requirement === 'j02'" class="field">
-          <span>Jalon J0.2 (fin de cadrage)</span>
-          <input v-model="j02" type="date" :max="effectiveJ08 ?? undefined" required />
-          <small v-if="effectiveJ08" class="field-hint">Au plus tard le J0.8 ({{ formatDate(effectiveJ08) }}).</small>
+        <label class="field">
+          <span>Motif</span>
+          <select v-model="decalageMotif" required>
+            <option value="" disabled>Choisir un motif…</option>
+            <option v-for="item in MOTIFS_DECALAGE" :key="item" :value="item">{{ item }}</option>
+          </select>
         </label>
-
-        <dl v-else-if="requirement === 'passage'" class="section-facts facts-list">
-          <div>
-            <dt>J0.8 (CSDA visé)</dt>
-            <dd>{{ effectiveJ08 ? formatDate(effectiveJ08) : '—' }}</dd>
-          </div>
-          <div>
-            <dt>Process</dt>
-            <dd v-if="dossier.fas">FAS : CSDA déclaratif (consigné sans débat, Revue DATM optionnelle)</dd>
-            <dd v-else>Standard : arbitrage DATM, Revue DATM puis CSDA</dd>
-          </div>
-          <p v-if="notEligible" class="field-error" role="alert">
-            Pas encore éligible : le J0.8 doit tomber cette semaine ou la suivante.
-          </p>
-        </dl>
-
-        <label v-else-if="requirement === 'revueDatm'" class="field">
-          <span>Date de la Revue DATM</span>
-          <input v-model="revueDatm" type="date" :min="today" required />
+        <label class="field">
+          <span>Commentaire <em>(facultatif)</em></span>
+          <textarea v-model="decalageCommentaire" rows="2" />
         </label>
+      </template>
 
-        <label v-else-if="requirement === 'j08Reel'" class="field">
-          <span>Date de séance du CSDA</span>
-          <input v-model="j08Reel" type="date" :max="today" required />
+      <div v-else-if="requirement === 'kickoff'" class="field-row">
+        <label class="field">
+          <span>Date du kick-off</span>
+          <input v-model="kickoffDate" type="date" required />
         </label>
-
-        <label v-else-if="requirement === 'motif'" class="field">
-          <span>Motif d’abandon</span>
-          <input v-model="motif" type="text" placeholder="Obligatoire…" required />
+        <label class="field">
+          <span>Interlocuteur DS</span>
+          <input v-model="interlocuteurDs" type="text" list="interlocuteurs-ds" placeholder="Nom…" required />
+          <datalist id="interlocuteurs-ds">
+            <option v-for="name in INTERLOCUTEURS_DS" :key="name" :value="name" />
+          </datalist>
         </label>
-      </section>
-
-      <div class="modal-actions">
-        <button type="button" class="btn" @click="cancel">Annuler</button>
-        <button
-          type="submit"
-          class="btn"
-          :class="has('motif') ? 'btn-danger' : 'btn-primary'"
-          :disabled="!answer"
-        >
-          {{ submitLabel }}
-        </button>
       </div>
-    </form>
-  </dialog>
+
+      <div v-else-if="requirement === 'cadrage'" class="field-row">
+        <fieldset class="choice-group">
+          <legend>Cadrage technique</legend>
+          <label class="choice"><input v-model="cadrageTechnique" type="radio" :value="true" /> Oui</label>
+          <label class="choice"><input v-model="cadrageTechnique" type="radio" :value="false" /> Non</label>
+        </fieldset>
+        <fieldset class="choice-group">
+          <legend>Cadrage sécurité</legend>
+          <label class="choice"><input v-model="cadrageSecurite" type="radio" :value="true" /> Oui</label>
+          <label class="choice"><input v-model="cadrageSecurite" type="radio" :value="false" /> Non</label>
+        </fieldset>
+      </div>
+
+      <label v-else-if="requirement === 'j02'" class="field">
+        <span>Jalon J0.2 (fin de cadrage)</span>
+        <input v-model="j02" type="date" :max="effectiveJ08 ?? undefined" required />
+        <small v-if="effectiveJ08" class="field-hint">Au plus tard le J0.8 ({{ formatDate(effectiveJ08) }}).</small>
+      </label>
+
+      <dl v-else-if="requirement === 'passage'" class="section-facts facts-list">
+        <div>
+          <dt>J0.8 (CSDA visé)</dt>
+          <dd>{{ effectiveJ08 ? formatDate(effectiveJ08) : '—' }}</dd>
+        </div>
+        <div>
+          <dt>Process</dt>
+          <dd v-if="dossier.fas">FAS : CSDA déclaratif (consigné sans débat, Revue DATM optionnelle)</dd>
+          <dd v-else>Standard : arbitrage DATM, Revue DATM puis CSDA</dd>
+        </div>
+        <p v-if="notEligible" class="field-error" role="alert">
+          Pas encore éligible : le J0.8 doit tomber cette semaine ou la suivante.
+        </p>
+      </dl>
+
+      <label v-else-if="requirement === 'revueDatm'" class="field">
+        <span>Date de la Revue DATM</span>
+        <input v-model="revueDatm" type="date" :min="today" required />
+      </label>
+
+      <label v-else-if="requirement === 'j08Reel'" class="field">
+        <span>Date de séance du CSDA</span>
+        <input v-model="j08Reel" type="date" :max="today" required />
+      </label>
+
+      <label v-else-if="requirement === 'motif'" class="field">
+        <span>Motif d’abandon</span>
+        <input v-model="motif" type="text" placeholder="Obligatoire…" required />
+      </label>
+    </section>
+
+    <template #actions>
+      <button type="button" class="btn" @click="$emit('cancel')">Annuler</button>
+      <button
+        type="submit"
+        class="btn"
+        :class="has('motif') ? 'btn-danger' : 'btn-primary'"
+        :disabled="!answer"
+      >
+        {{ submitLabel }}
+      </button>
+    </template>
+  </UiModal>
 </template>
 
 <style scoped>
-.modal {
-  width: min(520px, calc(100vw - 32px));
-  max-height: calc(100dvh - 32px);
-  padding: 0;
-  border: 1px solid var(--bordure);
-  border-radius: 16px;
-  background: var(--carte);
-  color: var(--text);
-  box-shadow: var(--ombre);
-}
-
-.modal::backdrop {
-  background: rgba(14, 42, 92, 0.45);
-}
-
-.modal-body {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 20px 24px;
-}
-
-.modal-header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.modal-title {
-  margin: 0;
-  font-family: var(--title);
-  font-size: 1.125rem;
-  color: var(--bleu-700);
-}
-
 .modal-subject {
   margin: 0;
   font-size: 0.875rem;
@@ -552,12 +491,6 @@ function onDialogClick(event: MouseEvent) {
   outline: none;
   border-color: var(--bleu-600);
   box-shadow: 0 0 0 3px var(--bleu-100);
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 /* Boutons de la maquette : secondaire bordé, primaire bleu, destructif rouge. */

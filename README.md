@@ -26,13 +26,19 @@ de développement avant de builder.
 
 ```
 app.vue               racine : layout + page courante, modèle de titre d'onglet
-error.vue             page d'erreur (404) dans le layout commun
+error.vue             page d'erreur : image 404 de la mascotte (public/404.svg), retour au tableau de bord
 layouts/default.vue   bandeau de l'application + zone de la vue
 pages/
-  index.vue           redirige vers /dds
-  dds.vue             vue DDS (KanbanBoard)
-  [view].vue          autres vues de la navigation, pas encore implémentées
-components/           composants (importés automatiquement par Nuxt)
+  index.vue           redirige vers /dashboard (page par défaut)
+  dds.vue             vue DDS (<DdsKanbanBoard>)
+  ceda.vue, csda.vue… une page par vue de la navigation (en-tête seul pour l’instant)
+components/           importés automatiquement ; le chemin donne le préfixe du nom
+  ui/                 briques génériques sans métier : Modal → <UiModal> (base de toutes les modales), Drawer → <UiDrawer>
+  layout/             AppHeader, ViewHeader → <LayoutAppHeader>, <LayoutViewHeader>
+  dds/                module DDS
+    kanban/           Board, Lane, Cell, Card → <DdsKanbanBoard>…
+    drawer/           Drawer (UiDrawer + DDS), Body (contenu) → <DdsDrawer>, <DdsDrawerBody>
+    RuleModal.vue     fenêtre des règles de statut (UiModal + règles) → <DdsRuleModal>
 composables/          useKanban (état et règles du board), useDropZone, useToday
 utils/                format (dates, durées), navigation (vues du bandeau)
 domain/               règles métier pures : workflow (statuts, règles, phases), périodes, référentiels
@@ -45,5 +51,8 @@ public/               favicon, mascottes
   `utils/`. Les modules de `domain/` et `data/` s'importent explicitement via l'alias `~/`.
 - **Rendu côté navigateur** (`ssr: false` dans `nuxt.config.ts`) : pas de back-end pour
   l'instant, l'état vit en mémoire. À revoir avec l'arrivée de l'API.
+- **Organisation des composants** : un dossier par module métier (`dds/`, puis `ceda/`…),
+  un sous-dossier par composant parent (un enfant n'a de sens que dans son parent), deux
+  niveaux au plus. Un composant partagé par deux modules, sans métier, passe dans `ui/`.
 - **Règles métier** : toutes dans `domain/workflow.ts` (`canMoveTo`, `STAGE_RULES`,
   `PHASES`…) ; l'interface ne fait que l'interroger.

@@ -3,5 +3,5 @@ useHead({ title: 'DDS' })
 </script>
 
 <template>
-  <KanbanBoard />
+  <DdsKanbanBoard />
 </template>

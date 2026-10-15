@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// Accueil : la vue DDS, seule implémentée pour l'instant (valeur littérale, lue à la compilation par Nuxt).
-definePageMeta({ redirect: '/dds' })
+// Accueil : le tableau de bord, page par défaut de l'Usine de Pilotage (valeur littérale, lue à la compilation par Nuxt).
+definePageMeta({ redirect: '/dashboard' })
 </script>
 
 <template>

@@ -1,59 +1,56 @@
-/**
- * Vues de l'application, reprises de la navigation de la maquette « Usine de Pilotage »
- * (ordre du profil Coordination, qui les voit toutes). Seule la vue DDS est implémentée.
- * Chaque vue est une page Nuxt à l'adresse `/<id>` (pages/dds.vue, pages/[view].vue).
- */
-
-export type ViewId =
-  | 'dashboard'
-  | 'dds'
-  | 'ceda'
-  | 'datm'
-  | 'csda-prep'
-  | 'csda'
-  | 'cockpit'
-  | 'commandes'
-  | 'externalisation'
-  | 'pdc'
-  | 'referentiels'
-  | 'habilitations'
-  | 'reporting'
+export enum ViewId {
+	Dashboard = 'dashboard',
+	Dds = 'dds',
+	Ceda = 'ceda',
+	Datm = 'datm',
+	CsdaPrep = 'csda-prep',
+	Csda = 'csda',
+	Cockpit = 'cockpit',
+	Commandes = 'commandes',
+	Externalisation = 'externalisation',
+	Pdc = 'pdc',
+	Referentiels = 'referentiels',
+	Habilitations = 'habilitations',
+	Reporting = 'reporting',
+}
 
 export interface NavItem {
-  id: ViewId
-  label: string
-  /** Nom d'icône Material Symbols. */
-  icon: string
-  /** Mascotte affichée dans le bandeau (fichier de public/mascottes). */
-  mascotte: string
+	id: ViewId;
+	label: string;
+	icon: string; // Nom d'icône Material Symbols
+	mascotte: string; // Mascotte affichée dans le bandeau (fichier de public/mascottes).
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
-  { id: 'dashboard', label: 'Tableau de bord', icon: 'home', mascotte: '02' },
-  { id: 'dds', label: 'DDS', icon: 'assignment', mascotte: '06' },
-  { id: 'ceda', label: 'CEDA', icon: 'groups', mascotte: '11' },
-  { id: 'datm', label: 'Revue DATM', icon: 'fact_check', mascotte: '08' },
-  { id: 'csda-prep', label: 'CSDA / fin de Cadrage', icon: 'event_upcoming', mascotte: '01' },
-  { id: 'csda', label: 'CSDA', icon: 'gavel', mascotte: '19' },
-  { id: 'cockpit', label: 'Cockpit', icon: 'work', mascotte: '04' },
-  { id: 'commandes', label: 'Commandes CDS', icon: 'receipt_long', mascotte: '09' },
-  { id: 'externalisation', label: 'Externalisation CDS', icon: 'swap_horiz', mascotte: '14' },
-  { id: 'pdc', label: 'Plan de charge', icon: 'calendar_month', mascotte: '16' },
-  { id: 'referentiels', label: 'Référentiels', icon: 'storage', mascotte: '17' },
-  { id: 'habilitations', label: 'Habilitations', icon: 'lock', mascotte: '18' },
-  { id: 'reporting', label: 'Reporting Domaine', icon: 'summarize', mascotte: '03' },
-]
+	{ id: ViewId.Dashboard, label: 'Tableau de bord', icon: 'home', mascotte: '02' },
+	{ id: ViewId.Ceda, label: 'CEDA', icon: 'groups', mascotte: '11' },
+	{ id: ViewId.Dds, label: 'DDS', icon: 'assignment', mascotte: '06' },
+	{ id: ViewId.Datm, label: 'Revue DATM', icon: 'fact_check', mascotte: '08' },
+	{
+		id: ViewId.CsdaPrep,
+		label: 'CSDA / fin de Cadrage',
+		icon: 'event_upcoming',
+		mascotte: '01',
+	},
+	{ id: ViewId.Csda, label: 'CSDA', icon: 'gavel', mascotte: '19' },
+	{ id: ViewId.Cockpit, label: 'Cockpit', icon: 'work', mascotte: '04' },
+	{ id: ViewId.Cockpit, label: 'Commandes CDS', icon: 'receipt_long', mascotte: '09' },
+	{
+		id: ViewId.Externalisation,
+		label: 'Externalisation CDS',
+		icon: 'swap_horiz',
+		mascotte: '14',
+	},
+	{ id: ViewId.Pdc, label: 'Plan de charge', icon: 'calendar_month', mascotte: '16' },
+	{ id: ViewId.Referentiels, label: 'Référentiels', icon: 'storage', mascotte: '17' },
+	{ id: ViewId.Habilitations, label: 'Habilitations', icon: 'lock', mascotte: '18' },
+	{ id: ViewId.Reporting, label: 'Reporting Domaine', icon: 'summarize', mascotte: '03' },
+];
 
-export function isViewId(id: string): id is ViewId {
-  return NAV_ITEMS.some((item) => item.id === id)
-}
-
-/** Entrée de navigation d'une vue ; `undefined` pour une adresse hors navigation. */
 export function getNavItem(id: string): NavItem | undefined {
-  return NAV_ITEMS.find((item) => item.id === id)
+	return NAV_ITEMS.find((item) => item.id === id);
 }
 
-/** Titre d'onglet : « DDS · Usine de Pilotage » ; nom de l'application seul sans titre de page. */
 export function pageTitle(title?: string | null): string {
-  return title ? `${title} · Usine de Pilotage` : 'Usine de Pilotage'
+	return title ? `${title} · Usine de Pilotage` : 'Usine de Pilotage';
 }

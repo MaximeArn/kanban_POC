@@ -175,9 +175,11 @@ function onDrawerReschedule(id: string, date: string) {
   rescheduleDossier(id, date)
 }
 
-async function onDrawerClose() {
+/** Fermeture par bouton ou Échap : le focus revient sur la carte ; par clic extérieur, il reste où l'on a cliqué. */
+async function onDrawerClose(outside = false) {
   const id = selectedId.value
   closeDossier()
+  if (outside) return
   await nextTick()
   if (id) document.getElementById(`card-open-${id}`)?.focus()
 }
@@ -202,7 +204,7 @@ function onPendingCancel() {
         Disposition de la maquette : filtre Phase à droite du titre, recherche sur toute la
         largeur en dessous. Pas de filtre par AS : le périmètre est celui du profil connecté.
       -->
-      <ViewHeader
+      <LayoutViewHeader
         title="Suivi Cadrage et Instruction"
         :eyebrow="eyebrow"
         subtitle="Vos DDS uniquement — glissez une carte pour faire évoluer le statut"
@@ -265,7 +267,7 @@ function onPendingCancel() {
             Réinitialiser les filtres
           </button>
         </div>
-      </ViewHeader>
+      </LayoutViewHeader>
 
       <!-- Invisible : restitue aux lecteurs d'écran le résultat des déplacements. -->
       <p class="sr-only" role="status" aria-live="polite">{{ announcement }}</p>
@@ -332,7 +334,7 @@ function onPendingCancel() {
 
         <div ref="bodyRow" class="board zone-defilement" @scroll="syncHeaderScroll">
           <div class="board-content">
-            <KanbanLane
+            <DdsKanbanLane
               v-for="lane in lanes"
               :key="lane.key"
               :lane="lane"
@@ -344,7 +346,7 @@ function onPendingCancel() {
               <!-- Archive « Terminés » : simple grille de cartes, sans les colonnes du workflow. -->
               <div v-if="lane.kind === 'done'" class="card-grid" role="list" aria-label="DDS archivées">
                 <div v-for="dossier in lane.dossiers" :key="dossier.id" role="listitem">
-                  <KanbanCard
+                  <DdsKanbanCard
                     :dossier="dossier"
                     :dragging="draggedId === dossier.id"
                     :selected="selectedId === dossier.id"
@@ -368,13 +370,13 @@ function onPendingCancel() {
                     {{ column.phase.label }} · {{ phaseCount(lane, column.phase) }}
                   </span>
                 </div>
-                <KanbanCell
+                <DdsKanbanCell
                   v-else
                   :label="`${column.stage.label} – ${lane.label}${lane.dates ? ` (${lane.dates})` : ''}`"
                   :drop-state="dropStateFor(column.stage.id, lane.key)"
                   @drop="onDrop(lane.key, $event, column.stage.id)"
                 >
-                  <KanbanCard
+                  <DdsKanbanCard
                     v-for="dossier in cellOf(lane, column.stage.id)"
                     :key="dossier.id"
                     :dossier="dossier"
@@ -385,10 +387,10 @@ function onPendingCancel() {
                     @drag-start="onDragStart"
                     @drag-end="onDragEnd"
                   />
-                </KanbanCell>
+                </DdsKanbanCell>
                 </template>
               </template>
-            </KanbanLane>
+            </DdsKanbanLane>
 
             <p v-if="lanes.every((l) => l.count === 0)" class="board-empty">
               Aucune DDS ne correspond aux filtres.
@@ -398,10 +400,8 @@ function onPendingCancel() {
       </div>
     </div>
 
-    <Transition name="drawer">
-      <DossierDrawer
-        v-if="selectedDossier"
-        :dossier="selectedDossier"
+    <DdsDrawer
+        :dossier="selectedDossier ?? null"
         :today="today"
         @move="onDrawerMove"
         @reschedule="onDrawerReschedule"
@@ -410,7 +410,6 @@ function onPendingCancel() {
         @urgence="setUrgence"
         @close="onDrawerClose"
       />
-    </Transition>
 
     <!-- Rappel du statut d'arrivée (spec §6.2) : informatif, il ne bloque rien. -->
     <Transition name="toast">
@@ -423,7 +422,7 @@ function onPendingCancel() {
       </div>
     </Transition>
 
-    <PendingMoveModal
+    <DdsRuleModal
       v-if="pendingMove && pendingDossier"
       :dossier="pendingDossier"
       :target="pendingMove.target"
@@ -673,7 +672,7 @@ input:focus-visible,
   scrollbar-gutter: stable;
 }
 
-/* Grille sans gouttière : les colonnes sont matérialisées par des filets (cf. KanbanCell). */
+/* Grille sans gouttière : les colonnes sont matérialisées par des filets (cf. Cell). */
 /* Les lignes sont des panneaux espacés ; l'espace suffit à les séparer. */
 /*
  * Largeur minimale = toutes les colonnes + la bordure des panneaux (2 × 1px) : même repliées,
@@ -937,21 +936,9 @@ input:focus-visible,
   transform: translate(-50%, 8px);
 }
 
-.drawer-enter-active,
-.drawer-leave-active {
-  transition: transform 0.2s ease;
-}
-
-.drawer-enter-from,
-.drawer-leave-to {
-  transform: translateX(100%);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .toast-enter-active,
-  .toast-leave-active,
-  .drawer-enter-active,
-  .drawer-leave-active {
+  .toast-leave-active {
     transition: none;
   }
 }
