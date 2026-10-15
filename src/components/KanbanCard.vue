@@ -1,9 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { TYPE_LABELS, availableMoves, type Dossier, type MoveOption, type StageId } from '../domain/workflow'
+import {
+  VALIDATED_STAGES,
+  availableMoves,
+  daysLate,
+  getStage,
+  isExit,
+  type Dossier,
+  type MoveOption,
+  type StageId,
+} from '../domain/workflow'
 import { DND_MIME } from '../composables/useKanban'
-import { daysLate, todayIso } from '../domain/periods'
-import { formatDelay, formatShortDate, initials, personColorIndex } from '../utils/format'
+import { useToday } from '../composables/useToday'
+import { formatDelay, formatShortDate } from '../utils/format'
 
 const props = defineProps<{
   dossier: Dossier
@@ -18,16 +27,27 @@ const emit = defineEmits<{
   'drag-end': []
 }>()
 
-const moves = computed(() => availableMoves(props.dossier))
-const today = todayIso()
-const delay = computed(() => daysLate(props.dossier, today))
+const today = useToday()
+const moves = computed(() => availableMoves(props.dossier, today.value))
+const delay = computed(() => daysLate(props.dossier, today.value))
 
-/** Sur un dossier validé, revenir en arrière revient à l'invalider : on le dit. */
-const previousLabel = computed(() =>
-  props.dossier.stage === 'valide'
-    ? `Invalider (retour en « ${moves.value.previous.label} »)`
-    : `Étape précédente : ${moves.value.previous.label}`,
+/** Revenir en arrière depuis une validation ou une sortie a un sens métier : on le nomme. */
+const previousLabel = computed(() => {
+  const target = `« ${moves.value.previous.label} »`
+  if (VALIDATED_STAGES.includes(props.dossier.stage)) return `Invalider (retour en ${target})`
+  if (props.dossier.stage === 'abandonnee') return `Réactiver (retour en ${target})`
+  return `Statut précédent : ${moves.value.previous.label}`
+})
+
+/** Depuis Instruction, avancer est une demande de passage en CSDA (règle à confirmer). */
+const nextLabel = computed(() =>
+  moves.value.next.target === 'demandeCsda'
+    ? 'Demander le passage en CSDA'
+    : `Étape suivante : ${moves.value.next.label}`,
 )
+
+/** Couleur de la pastille météo de la maquette. */
+const METEO_TONES = { Vert: 'succes', Orange: 'vigilance', Rouge: 'alerte' } as const
 
 function moveTo(option: MoveOption, action: string) {
   if (option.target && option.allowed) emit('move', props.dossier.id, option.target, action)
@@ -54,10 +74,25 @@ function onDragStart(event: DragEvent) {
     @dragstart="onDragStart"
     @dragend="emit('drag-end')"
   >
+    <!-- Bandeau « Urgente » de la maquette. -->
+    <div v-if="dossier.urgent" class="card-urgent" :title="dossier.motifUrgence ?? undefined">
+      <span class="ms" aria-hidden="true">warning</span> Urgente
+    </div>
+
     <header class="card-header">
-      <span class="card-id">{{ dossier.id }}</span>
-      <span v-if="dossier.type" class="badge" :class="`badge-${dossier.type}`">
-        {{ TYPE_LABELS[dossier.type] }}
+      <span class="card-id">
+        <span
+          v-if="dossier.meteo"
+          class="meteo"
+          :class="`meteo-${METEO_TONES[dossier.meteo.statut]}`"
+          :title="`Météo ${dossier.meteo.statut} — ${dossier.meteo.commentaire}`"
+        />
+        <span v-if="dossier.meteo" class="sr-only">Météo {{ dossier.meteo.statut }}.</span>
+        {{ dossier.id }}
+      </span>
+      <span v-if="isExit(dossier.stage)" class="badge badge-exit">{{ getStage(dossier.stage).label }}</span>
+      <span v-else-if="dossier.fas" class="badge badge-fas" title="Fiche d’architecture simplifiée : CSDA déclaratif">
+        FAS
       </span>
     </header>
 
@@ -73,26 +108,26 @@ function onDragStart(event: DragEvent) {
       </button>
     </h3>
 
-    <footer class="card-footer">
-      <span
-        class="avatar"
-        :style="{ '--person-color': `var(--person-${personColorIndex(dossier.architecte)})` }"
-        :title="`AS : ${dossier.architecte}`"
-        aria-hidden="true"
-      >
-        {{ initials(dossier.architecte) }}
-      </span>
-      <span class="sr-only">AS : {{ dossier.architecte }}.</span>
+    <p class="card-requester">{{ dossier.demandeur }}</p>
 
+    <!-- Pastille « En attente » de la maquette : le motif est dans l'infobulle et la fiche. -->
+    <p v-if="dossier.attente" class="card-hold" :title="`En attente : ${dossier.attente.motif}`">
+      <span class="ms" aria-hidden="true">pause_circle</span> En attente
+      <span class="sr-only">: {{ dossier.attente.motif }}</span>
+    </p>
+
+    <footer class="card-footer">
       <!-- Date et retard groupés : si la place manque, la pastille passe sous la date. -->
       <span class="card-schedule">
         <span
+          v-if="dossier.j08"
           class="card-date"
           :class="{ 'is-late': delay > 0 }"
-          :title="delay > 0 ? `CSDA visé dépassé de ${delay} jour${delay > 1 ? 's' : ''}` : 'Date du CSDA visé'"
+          :title="delay > 0 ? `J0.8 dépassé de ${delay} jour${delay > 1 ? 's' : ''}` : 'Jalon J0.8 (CSDA visé)'"
         >
-          CSDA <time :datetime="dossier.dateCsdaVisee">{{ formatShortDate(dossier.dateCsdaVisee, today) }}</time>
+          CSDA <time :datetime="dossier.j08">{{ formatShortDate(dossier.j08, today) }}</time>
         </span>
+        <span v-else class="card-date">J0.8 à poser</span>
         <span v-if="delay > 0" class="card-delay">
           <span aria-hidden="true">+{{ formatDelay(delay) }}</span>
           <span class="sr-only">En retard de {{ delay }} jour{{ delay > 1 ? 's' : '' }}.</span>
@@ -116,12 +151,8 @@ function onDragStart(event: DragEvent) {
           type="button"
           data-action="next"
           :disabled="!moves.next.allowed"
-          :title="moves.next.allowed ? `Étape suivante : ${moves.next.label}` : moves.next.reason"
-          :aria-label="
-            moves.next.allowed
-              ? `Étape suivante (${moves.next.label}) – ${dossier.id}`
-              : `Étape suivante – ${dossier.id}`
-          "
+          :title="moves.next.allowed ? nextLabel : moves.next.reason"
+          :aria-label="moves.next.allowed ? `${nextLabel} – ${dossier.id}` : `Étape suivante – ${dossier.id}`"
           @click.stop="moveTo(moves.next, 'next')"
         >
           →
@@ -143,9 +174,10 @@ function onDragStart(event: DragEvent) {
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  border-radius: 10px;
+  overflow: hidden;
+  background: var(--carte);
+  border: 1px solid var(--bordure);
+  border-radius: 12px;
   box-shadow: var(--ring), var(--elevation);
   cursor: pointer;
   transition:
@@ -178,10 +210,57 @@ function onDragStart(event: DragEvent) {
   gap: 8px;
 }
 
+/* Bandeau rouge pleine largeur en haut de carte (marges négatives = padding de la carte). */
+.card-urgent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -10px -12px 0;
+  padding: 2px 12px;
+  background: var(--alerte);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.card-urgent .ms {
+  font-size: 12px;
+}
+
 .card-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--mono);
-  font-size: 0.75rem;
-  color: var(--text-muted);
+  font-size: 0.6875rem;
+  color: var(--gris-600);
+}
+
+/* Pastille météo de la maquette (Vert / Orange / Rouge). */
+.meteo {
+  flex: 0 0 9px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.meteo-succes {
+  background: var(--succes);
+}
+
+.meteo-vigilance {
+  background: var(--vigilance);
+}
+
+.meteo-alerte {
+  background: var(--alerte);
+}
+
+.badge-exit {
+  color: #41485a;
+  background: var(--gris-100);
 }
 
 .badge {
@@ -193,14 +272,28 @@ function onDragStart(event: DragEvent) {
   text-transform: uppercase;
 }
 
-.badge-formel {
-  color: var(--formel);
-  background: var(--formel-bg);
-}
-
-.badge-declaratif {
+.badge-fas {
   color: var(--declaratif);
   background: var(--declaratif-bg);
+}
+
+/* Pastille « En attente » : orange de vigilance, comme la maquette. */
+.card-hold {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 1px 8px 1px 6px;
+  border-radius: 999px;
+  background: var(--vigilance-soft);
+  color: var(--vigilance-fg);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.card-hold .ms {
+  font-size: 14px;
 }
 
 .card-title {
@@ -243,17 +336,14 @@ function onDragStart(event: DragEvent) {
   margin-top: 2px;
 }
 
-.avatar {
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 24px;
-  height: 24px;
-  border-radius: 50%;
-  /* Fond pâle et lettres colorées : repérable sans attirer l'œil. */
-  background: color-mix(in srgb, var(--person-color, var(--accent)) 14%, var(--surface));
-  color: var(--person-color, var(--accent));
-  font-size: 0.6875rem;
-  font-weight: 700;
+/* Demandeur sous le titre, comme la carte de la maquette. */
+.card-requester {
+  margin: -2px 0 0;
+  overflow: hidden;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gris-600);
 }
 
 .card-schedule {

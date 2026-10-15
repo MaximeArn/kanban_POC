@@ -1,20 +1,30 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
-import { LATE_LANE, useKanban, type LaneKind, type MoveResult } from '../composables/useKanban'
-import { getStage, type StageId, type TypeDossier } from '../domain/workflow'
+import { computed, nextTick, ref, watch } from 'vue'
+import {
+  LATE_LANE,
+  useKanban,
+  type Lane,
+  type MoveResult,
+  type PendingAnswer,
+  type ToggleFilter,
+} from '../composables/useKanban'
+import { PHASES, STAGE_RULES, type Phase, type StageId } from '../domain/workflow'
 import { formatLongDate } from '../utils/format'
 import DossierDrawer from './DossierDrawer.vue'
 import KanbanCard from './KanbanCard.vue'
 import KanbanCell from './KanbanCell.vue'
 import KanbanLane from './KanbanLane.vue'
-import TypeDossierModal from './TypeDossierModal.vue'
+import PendingMoveModal from './PendingMoveModal.vue'
+import ViewHeader from './ViewHeader.vue'
 
 const {
   filters,
   today,
   currentLaneKey,
-  architectes,
   hasActiveFilters,
+  toggleCounts,
+  togglePhase,
+  toggleFilter,
   columns,
   lanes,
   draggedId,
@@ -23,6 +33,7 @@ const {
   pendingMove,
   pendingDossier,
   announcement,
+  reminder,
   selectedId,
   selectedDossier,
   moveDossier,
@@ -30,6 +41,10 @@ const {
   rescheduleDossier,
   confirmPendingMove,
   cancelPendingMove,
+  setAttente,
+  setFas,
+  setUrgence,
+  dismissReminder,
   resetFilters,
   openDossier,
   closeDossier,
@@ -41,21 +56,84 @@ const {
  */
 let pendingAction: string | null = null
 
-const todayLabel = formatLongDate(today)
+/** À côté du titre, comme la maquette : nombre de DDS affichées, et la date du jour (jalons relatifs). */
+const eyebrow = computed(() => {
+  const total = summary.value.total
+  return `${total} dossier${total > 1 ? 's' : ''} · ${formatLongDate(today.value)}`
+})
 
-/** Chiffres clés de l'en-tête, sur les dossiers affichés (filtres appliqués). */
+/**
+ * Chiffres clés de l'en-tête, sur les DDS affichées (filtres appliqués). La semaine en cours
+ * accueille aussi les DDS sans J0.8 : « au CSDA cette semaine » ne compte que celles qui en ont un.
+ */
 const summary = computed(() => {
-  const countOf = (kind: LaneKind) =>
-    lanes.value.filter((l) => l.kind === kind).reduce((sum, l) => sum + l.count, 0)
+  const shown = lanes.value.flatMap((l) => l.dossiers)
+  const current = lanes.value.find((l) => l.kind === 'current')?.dossiers ?? []
   return {
-    total: lanes.value.reduce((sum, l) => sum + l.count, 0),
-    late: countOf('late'),
-    current: countOf('current'),
+    total: shown.length,
+    late: lanes.value.find((l) => l.kind === 'late')?.count ?? 0,
+    sansJ08: shown.filter((d) => d.j08 === null).length,
+    current: current.filter((d) => d.j08 !== null).length,
   }
 })
 
-/** Seules « En retard » et la semaine en cours sont dépliées par défaut. */
-const expandedLanes = ref(new Set<string>([LATE_LANE, currentLaneKey]))
+/** Chiffres clés qui servent aussi de filtres (spec F-DDS-03bis) : compteurs hors bascules. */
+const TOGGLES: { key: ToggleFilter; label: string }[] = [
+  { key: 'urgentes', label: 'urgentes' },
+  { key: 'plusDe3Mois', label: 'de plus de 3 mois' },
+  { key: 'enAttente', label: 'en attente' },
+]
+
+/**
+ * Pistes de la grille : largeur de colonne pour un statut, bandeau étroit pour une phase
+ * masquée. Partagées par la barre des titres et toutes les lignes, qui restent alignées.
+ */
+const gridStyle = computed(() => {
+  const stages = columns.value.filter((slot) => slot.kind === 'stage').length
+  const bands = columns.value.length - stages
+  return {
+    '--board-columns': columns.value
+      .map((slot) => (slot.kind === 'stage' ? 'var(--column-width)' : 'var(--band-width)'))
+      .join(' '),
+    '--board-min-width': `calc(${stages} * var(--column-width) + ${bands} * var(--band-width) + 2px)`,
+  }
+})
+
+function cellOf(lane: Lane, stage: StageId) {
+  return lane.cells.find((cell) => cell.stage.id === stage)?.dossiers ?? []
+}
+
+function phaseCount(lane: Lane, phase: Phase): number {
+  return lane.dossiers.filter((d) => phase.stages.includes(d.stage)).length
+}
+
+/** Infobulle et texte lu de l'icône de règle / rappel d'une colonne. */
+function ruleLabel(stage: StageId): string {
+  const rule = STAGE_RULES[stage]
+  return rule ? `${rule.kind === 'regle' ? 'Règle' : 'Rappel'} : ${rule.text}` : ''
+}
+
+/** Le rappel d'un statut reste affiché quelques secondes après le déplacement. */
+let reminderTimer: ReturnType<typeof setTimeout> | undefined
+watch(reminder, (value) => {
+  clearTimeout(reminderTimer)
+  if (value) reminderTimer = setTimeout(dismissReminder, 8000)
+})
+
+/** Rangée des titres de colonnes (hors défilement) et zone du board qui défile. */
+const headerRow = ref<HTMLElement | null>(null)
+const bodyRow = ref<HTMLElement | null>(null)
+
+/** Comme la maquette : la rangée des titres suit le défilement horizontal du board. */
+function syncHeaderScroll() {
+  if (headerRow.value && bodyRow.value) headerRow.value.scrollLeft = bodyRow.value.scrollLeft
+}
+
+/** Dépliées par défaut : « En retard » et la semaine en cours. */
+const expandedLanes = ref(new Set<string>([LATE_LANE, currentLaneKey.value]))
+
+// Changement de semaine (page restée ouverte) : la nouvelle semaine en cours s'ouvre aussi.
+watch(currentLaneKey, (key) => expandedLanes.value.add(key))
 
 function toggleLane(key: string) {
   if (expandedLanes.value.has(key)) expandedLanes.value.delete(key)
@@ -108,6 +186,7 @@ function onDrawerMove(id: string, target: StageId) {
 }
 
 function onDrawerReschedule(id: string, date: string) {
+  pendingAction = null
   rescheduleDossier(id, date)
 }
 
@@ -118,14 +197,14 @@ async function onDrawerClose() {
   if (id) document.getElementById(`card-open-${id}`)?.focus()
 }
 
-function onTypeConfirm(type: TypeDossier) {
+function onPendingConfirm(answer: PendingAnswer) {
   const id = pendingMove.value?.dossierId
-  const result = confirmPendingMove(type)
+  const result = confirmPendingMove(answer)
   if (id && result === 'moved' && pendingAction) restoreFocus(id, pendingAction)
   pendingAction = null
 }
 
-function onTypeCancel() {
+function onPendingCancel() {
   cancelPendingMove()
   pendingAction = null
 }
@@ -134,78 +213,122 @@ function onTypeCancel() {
 <template>
   <div class="page">
     <div class="main-column">
-      <header class="app-header">
-        <div class="app-header-main">
-          <div class="brand">
-            <span class="brand-mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <rect x="3" y="4" width="5" height="16" rx="1.5" />
-                <rect x="9.5" y="4" width="5" height="11" rx="1.5" />
-                <rect x="16" y="4" width="5" height="7" rx="1.5" />
-              </svg>
-            </span>
-            <div>
-              <h1 class="brand-title">Suivi Cadrage et Instruction</h1>
-              <p class="brand-subtitle">Dossiers d’architecture · {{ todayLabel }}</p>
-            </div>
-          </div>
-
-          <div class="filters" role="search">
-            <label class="filter">
-              <span class="sr-only">Architecte solution (AS)</span>
-              <select v-model="filters.architecte">
-                <option value="">Tous les AS</option>
-                <option v-for="name in architectes" :key="name" :value="name">{{ name }}</option>
-              </select>
-            </label>
-
-            <label class="filter filter-search">
-              <span class="sr-only">Rechercher un dossier</span>
-              <svg class="filter-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
-                <path d="m20 20-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-              </svg>
-              <input v-model="filters.search" type="search" placeholder="Titre ou identifiant" />
-            </label>
-
-            <button v-if="hasActiveFilters" type="button" class="reset" @click="resetFilters">
-              Réinitialiser
+      <!--
+        Disposition de la maquette : filtre Phase à droite du titre, recherche sur toute la
+        largeur en dessous. Pas de filtre par AS : le périmètre est celui du profil connecté.
+      -->
+      <ViewHeader
+        title="Suivi Cadrage et Instruction"
+        :eyebrow="eyebrow"
+        subtitle="Vos DDS uniquement — glissez une carte pour faire évoluer le statut"
+      >
+        <template #actions>
+          <!-- Filtre Phase : aucune phase cochée = toutes affichées ; les autres se replient en bandeau. -->
+          <div class="phase-filter" role="group" aria-labelledby="phase-filter-label">
+            <span id="phase-filter-label" class="phase-filter-label">Phase</span>
+            <button
+              v-for="phase in PHASES"
+              :key="phase.id"
+              type="button"
+              class="phase-chip"
+              :aria-pressed="filters.phases.includes(phase.id)"
+              @click="togglePhase(phase.id)"
+            >
+              {{ phase.label }}
             </button>
           </div>
+        </template>
+
+        <div class="search" role="search">
+          <label class="search-field">
+            <span class="sr-only">Rechercher une DDS</span>
+            <span class="ms search-icon" aria-hidden="true">search</span>
+            <input
+              v-model="filters.search"
+              type="search"
+              placeholder="Rechercher par titre, domaine, demandeur, N° DDS…"
+            />
+          </label>
         </div>
 
-        <ul class="summary" aria-label="Synthèse des dossiers affichés">
-          <li class="summary-item">
-            <strong>{{ summary.total }}</strong> dossier{{ summary.total > 1 ? 's' : '' }}
-          </li>
-          <li class="summary-item" :class="{ 'is-alert': summary.late > 0 }">
-            <strong>{{ summary.late }}</strong> en retard
-          </li>
-          <li class="summary-item">
-            <strong>{{ summary.current }}</strong> au CSDA cette semaine
-          </li>
-        </ul>
-      </header>
+        <div class="toolbar">
+          <ul class="summary" aria-label="Synthèse des dossiers affichés">
+            <li class="summary-item" :class="{ 'is-alert': summary.late > 0 }">
+              <strong>{{ summary.late }}</strong> en retard
+            </li>
+            <li class="summary-item">
+              <strong>{{ summary.sansJ08 }}</strong> à pré-qualifier (sans J0.8)
+            </li>
+            <li class="summary-item">
+              <strong>{{ summary.current }}</strong> au CSDA cette semaine
+            </li>
+            <li v-for="toggle in TOGGLES" :key="toggle.key">
+              <button
+                type="button"
+                class="summary-item is-toggle"
+                :class="{ 'is-alert': toggle.key === 'urgentes', 'is-hold': toggle.key === 'enAttente' }"
+                :aria-pressed="filters.toggles.includes(toggle.key)"
+                :title="`N'afficher que les DDS ${toggle.label}`"
+                @click="toggleFilter(toggle.key)"
+              >
+                <strong>{{ toggleCounts[toggle.key] }}</strong> {{ toggle.label }}
+              </button>
+            </li>
+          </ul>
+
+          <button v-if="hasActiveFilters" type="button" class="reset" @click="resetFilters">
+            Réinitialiser les filtres
+          </button>
+        </div>
+      </ViewHeader>
 
       <!-- Invisible : restitue aux lecteurs d'écran le résultat des déplacements. -->
       <p class="sr-only" role="status" aria-live="polite">{{ announcement }}</p>
 
-      <main
-        class="board"
-        :style="{ '--stage-count': columns.length }"
-        aria-label="Tableau des dossiers par étape"
+      <div
+        class="board-area"
+        :style="gridStyle"
+        role="region"
+        aria-label="Tableau des DDS par statut"
       >
-        <div class="board-content">
+        <!--
+          Comme la maquette : les titres de colonnes sont hors de la zone qui défile, le board
+          ne passe donc jamais dessous ; leur défilement horizontal suit celui du board.
+        -->
+        <div ref="headerRow" class="board-header-row">
           <div class="board-header">
+            <template v-for="column in columns" :key="column.key">
+            <!-- Phase masquée : bandeau étroit avec son compteur ; un clic la réaffiche. -->
+            <button
+              v-if="column.kind === 'phase'"
+              type="button"
+              class="column-header column-band"
+              :title="`Phase « ${column.phase.label} » masquée — cliquer pour l'afficher`"
+              @click="togglePhase(column.phase.id)"
+            >
+              <span class="column-count">{{ column.count }}</span>
+              <span class="sr-only">
+                Phase « {{ column.phase.label }} » masquée, {{ column.count }} DDS. Afficher la phase.
+              </span>
+            </button>
             <div
-              v-for="column in columns"
-              :key="column.stage.id"
+              v-else
               class="column-header"
               :class="`is-${dropStateFor(column.stage.id) ?? 'idle'}`"
             >
               <span class="column-title">
                 {{ column.stage.label }}
-                <span v-if="column.stage.optional" class="column-tag">optionnelle</span>
+                <span
+                  v-if="STAGE_RULES[column.stage.id]"
+                  class="column-rule"
+                  :class="`is-${STAGE_RULES[column.stage.id]!.kind}`"
+                  :title="ruleLabel(column.stage.id)"
+                >
+                  <span class="ms" aria-hidden="true">{{
+                    STAGE_RULES[column.stage.id]!.kind === 'regle' ? 'rule' : 'lightbulb'
+                  }}</span>
+                  <span class="sr-only">{{ ruleLabel(column.stage.id) }}</span>
+                </span>
               </span>
               <span
                 class="column-count"
@@ -218,60 +341,76 @@ function onTypeCancel() {
                 {{ column.count === column.total ? column.total : `${column.count} / ${column.total}` }}
               </span>
             </div>
-          </div>
-
-          <KanbanLane
-            v-for="lane in lanes"
-            :key="lane.key"
-            :lane="lane"
-            :collapsed="!expandedLanes.has(lane.key)"
-            :header-drop-state="laneDropStateFor(lane.key)"
-            @toggle="toggleLane"
-            @drop="onDrop(lane.key, $event)"
-          >
-            <!-- « Terminés » : simple archive, sans les colonnes du workflow. -->
-            <div v-if="lane.kind === 'done'" class="archive" role="list" aria-label="Dossiers archivés">
-              <div v-for="dossier in lane.dossiers" :key="dossier.id" role="listitem">
-                <KanbanCard
-                  :dossier="dossier"
-                  :dragging="draggedId === dossier.id"
-                  :selected="selectedId === dossier.id"
-                  @open="openDossier"
-                  @move="onCardMove"
-                  @drag-start="onDragStart"
-                  @drag-end="onDragEnd"
-                />
-              </div>
-            </div>
-
-            <template v-else>
-              <KanbanCell
-                v-for="cell in lane.cells"
-                :key="cell.stage.id"
-                :label="`${cell.stage.label} – ${lane.label}${lane.dates ? ` (${lane.dates})` : ''}`"
-                :drop-state="dropStateFor(cell.stage.id, lane.key)"
-                @drop="onDrop(lane.key, $event, cell.stage.id)"
-              >
-                <KanbanCard
-                  v-for="dossier in cell.dossiers"
-                  :key="dossier.id"
-                  :dossier="dossier"
-                  :dragging="draggedId === dossier.id"
-                  :selected="selectedId === dossier.id"
-                  @open="openDossier"
-                  @move="onCardMove"
-                  @drag-start="onDragStart"
-                  @drag-end="onDragEnd"
-                />
-              </KanbanCell>
             </template>
-          </KanbanLane>
-
-          <p v-if="lanes.every((l) => l.count === 0)" class="board-empty">
-            Aucun dossier ne correspond aux filtres.
-          </p>
+          </div>
         </div>
-      </main>
+
+        <div ref="bodyRow" class="board zone-defilement" @scroll="syncHeaderScroll">
+          <div class="board-content">
+            <KanbanLane
+              v-for="lane in lanes"
+              :key="lane.key"
+              :lane="lane"
+              :collapsed="!expandedLanes.has(lane.key)"
+              :header-drop-state="laneDropStateFor(lane.key)"
+              @toggle="toggleLane"
+              @drop="onDrop(lane.key, $event)"
+            >
+              <!-- Archive « Terminés » : simple grille de cartes, sans les colonnes du workflow. -->
+              <div v-if="lane.kind === 'done'" class="card-grid" role="list" aria-label="DDS archivées">
+                <div v-for="dossier in lane.dossiers" :key="dossier.id" role="listitem">
+                  <KanbanCard
+                    :dossier="dossier"
+                    :dragging="draggedId === dossier.id"
+                    :selected="selectedId === dossier.id"
+                    @open="openDossier"
+                    @move="onCardMove"
+                    @drag-start="onDragStart"
+                    @drag-end="onDragEnd"
+                  />
+                </div>
+              </div>
+
+              <template v-else>
+                <template v-for="column in columns" :key="column.key">
+                <!-- Phase masquée : bandeau vertical, nombre de DDS de la ligne dans cette phase. -->
+                <div
+                  v-if="column.kind === 'phase'"
+                  class="phase-band"
+                  :title="`${column.phase.label} : ${phaseCount(lane, column.phase)} DDS masquée(s)`"
+                >
+                  <span class="phase-band-label">
+                    {{ column.phase.label }} · {{ phaseCount(lane, column.phase) }}
+                  </span>
+                </div>
+                <KanbanCell
+                  v-else
+                  :label="`${column.stage.label} – ${lane.label}${lane.dates ? ` (${lane.dates})` : ''}`"
+                  :drop-state="dropStateFor(column.stage.id, lane.key)"
+                  @drop="onDrop(lane.key, $event, column.stage.id)"
+                >
+                  <KanbanCard
+                    v-for="dossier in cellOf(lane, column.stage.id)"
+                    :key="dossier.id"
+                    :dossier="dossier"
+                    :dragging="draggedId === dossier.id"
+                    :selected="selectedId === dossier.id"
+                    @open="openDossier"
+                    @move="onCardMove"
+                    @drag-start="onDragStart"
+                    @drag-end="onDragEnd"
+                  />
+                </KanbanCell>
+                </template>
+              </template>
+            </KanbanLane>
+
+            <p v-if="lanes.every((l) => l.count === 0)" class="board-empty">
+              Aucune DDS ne correspond aux filtres.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <Transition name="drawer">
@@ -281,24 +420,41 @@ function onTypeCancel() {
         :today="today"
         @move="onDrawerMove"
         @reschedule="onDrawerReschedule"
+        @hold="setAttente"
+        @fas="setFas"
+        @urgence="setUrgence"
         @close="onDrawerClose"
       />
     </Transition>
 
-    <TypeDossierModal
+    <!-- Rappel du statut d'arrivée (spec §6.2) : informatif, il ne bloque rien. -->
+    <Transition name="toast">
+      <div v-if="reminder" :key="reminder.id" class="toast">
+        <span class="toast-chip"><span class="ms" aria-hidden="true">lightbulb</span> Rappel</span>
+        <p class="toast-text">
+          <strong>{{ reminder.dossierId }}</strong> en « {{ reminder.stageLabel }} » : {{ reminder.text }}
+        </p>
+        <button type="button" class="toast-close" aria-label="Fermer le rappel" @click="dismissReminder">✕</button>
+      </div>
+    </Transition>
+
+    <PendingMoveModal
       v-if="pendingMove && pendingDossier"
       :dossier="pendingDossier"
-      :target-label="getStage(pendingMove.target).label"
-      @confirm="onTypeConfirm"
-      @cancel="onTypeCancel"
+      :target="pendingMove.target"
+      :requirements="pendingMove.requirements"
+      :proposed-date="pendingMove.date"
+      :today="today"
+      @confirm="onPendingConfirm"
+      @cancel="onPendingCancel"
     />
   </div>
 </template>
 
 <style scoped>
+/* Le bandeau de l'application est dans App.vue : la vue occupe la hauteur restante. */
 .page {
-  height: 100vh;
-  height: 100dvh;
+  height: 100%;
 }
 
 /* Le drawer est en `position: fixed`, hors du flux : cette colonne occupe toute la page. */
@@ -308,123 +464,73 @@ function onTypeCancel() {
   height: 100%;
 }
 
-/*
- * En-tête clair : il s'efface devant le board. Le vert ne reste que sur l'icône,
- * et seule l'alerte « en retard » est colorée.
- */
-.app-header {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px 20px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-}
-
-.app-header-main {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: var(--accent);
-  color: var(--on-accent);
-}
-
-.brand-title {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  line-height: 1.2;
-  color: var(--text-h);
-}
-
-.brand-subtitle {
-  margin: 2px 0 0;
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-}
-
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.filter {
+/* Recherche sur toute la largeur, sous le titre (maquette). */
+.search-field {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-select,
+/* Champs arrondis de la maquette. */
 input,
 .reset {
   font: inherit;
   font-size: 0.875rem;
   height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text-h);
+  padding: 0 14px;
+  border: 1px solid var(--gris-300);
+  border-radius: 999px;
+  background: var(--carte);
+  color: var(--encre);
   box-sizing: border-box;
 }
 
-select:hover,
 input:hover {
-  border-color: color-mix(in srgb, var(--text-muted) 50%, var(--border));
+  border-color: #b9c0cd;
 }
 
-select {
-  min-width: 160px;
-  cursor: pointer;
+.search-field input {
+  width: 100%;
+  height: 40px;
+  padding-left: 40px;
 }
 
-.filter-search input {
-  width: 260px;
-  padding-left: 34px;
-}
-
-.filter-icon {
+.search-icon {
   position: absolute;
-  left: 11px;
-  color: var(--text-muted);
+  left: 14px;
+  font-size: 18px;
+  color: var(--gris-600);
   pointer-events: none;
 }
 
-select:focus-visible,
+/* Focus de la maquette : halo bleu clair, bordure bleue. */
 input:focus-visible,
 .reset:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--bleu-600);
+  box-shadow: 0 0 0 3px var(--bleu-100);
 }
 
 .reset {
+  flex-shrink: 0;
+  height: 30px;
   cursor: pointer;
+  border-color: transparent;
   background: transparent;
-  color: var(--text);
+  font-weight: 600;
+  color: var(--bleu-600);
 }
 
 .reset:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--bleu-100);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
 }
 
 .summary {
@@ -436,25 +542,101 @@ input:focus-visible,
   list-style: none;
 }
 
-/* Pastilles neutres : chiffres lisibles sans attirer l'œil. */
+/* Pastilles (« pill ») de la maquette : neutre, et alerte pour les retards. */
 .summary-item {
-  padding: 3px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
   border-radius: 999px;
-  background: var(--surface-2);
+  background: var(--gris-100);
   font-size: 0.8125rem;
-  color: var(--text-muted);
+  font-weight: 600;
+  color: #41485a;
 }
 
 .summary-item strong {
   font-weight: 700;
-  color: var(--text-h);
 }
 
-/* Seule l'alerte est colorée : c'est la seule qui appelle une action. */
-.summary-item.is-alert,
-.summary-item.is-alert strong {
-  background: var(--warning-bg);
-  color: var(--warning);
+.summary-item.is-alert {
+  background: var(--alerte-soft);
+  color: var(--alerte-fg);
+}
+
+/* Chiffres clés cliquables : même pastille, bordée pour signaler l'action. */
+.summary-item.is-toggle {
+  border: 1px solid var(--gris-300);
+  background: var(--carte);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #41485a;
+  cursor: pointer;
+}
+
+.summary-item.is-toggle:hover {
+  border-color: var(--bleu-600);
+}
+
+.summary-item.is-toggle.is-alert strong {
+  color: var(--alerte-fg);
+}
+
+.summary-item.is-toggle.is-hold strong {
+  color: var(--vigilance-fg);
+}
+
+/* Filtre engagé : fond bleu clair, texte bleu gras (langage unique des filtres, spec §8). */
+.summary-item.is-toggle[aria-pressed='true'],
+.phase-chip[aria-pressed='true'] {
+  border-color: var(--bleu-600);
+  background: var(--bleu-100);
+  color: var(--bleu-700);
+  font-weight: 700;
+}
+
+.summary-item.is-toggle[aria-pressed='true'] strong {
+  color: var(--bleu-700);
+}
+
+.summary-item.is-toggle:focus-visible,
+.phase-chip:focus-visible,
+.column-band:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--bleu-100);
+  border-color: var(--bleu-600);
+}
+
+.phase-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.phase-filter-label {
+  margin-right: 2px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--gris-600);
+}
+
+.phase-chip {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--gris-300);
+  border-radius: 999px;
+  background: var(--carte);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #41485a;
+  cursor: pointer;
+}
+
+.phase-chip:hover {
+  border-color: var(--bleu-600);
 }
 
 .sr-only {
@@ -471,48 +653,77 @@ input:focus-visible,
 
 
 /*
- * Grille étapes × lignes. Les colonnes ont une largeur fixe : en-têtes et cellules
- * de chaque ligne s'alignent sans grille partagée. Défilement dans les deux sens.
+ * Grille statuts × lignes. Les colonnes ont une largeur fixe : titres et cellules de chaque
+ * ligne s'alignent sans grille partagée.
  */
-.board {
+.board-area {
   --column-width: 260px;
+  /* Bandeau d'une phase masquée (filtre Phase). */
+  --band-width: 52px;
   --board-padding: 20px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/*
+ * Titres de colonnes hors de la zone qui défile (cf. maquette) : défilement horizontal
+ * piloté par le board (`syncHeaderScroll`). `scrollbar-gutter` réserve ici la même place
+ * que la barre de défilement verticale du board : les deux restent alignés jusqu'au bout.
+ */
+.board-header-row {
+  flex-shrink: 0;
+  padding: 12px var(--board-padding) 0;
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
+/* Zone du board : défilement dans les deux sens, sous la rangée des titres. */
+.board {
   flex: 1;
   min-height: 0;
   padding: 12px var(--board-padding) 16px;
   overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 /* Grille sans gouttière : les colonnes sont matérialisées par des filets (cf. KanbanCell). */
 /* Les lignes sont des panneaux espacés ; l'espace suffit à les séparer. */
+/*
+ * Largeur minimale = toutes les colonnes + la bordure des panneaux (2 × 1px) : même repliées,
+ * les lignes s'alignent sur la barre des titres, qui n'est plus dans cette zone.
+ */
 .board-content {
   display: flex;
   flex-direction: column;
   gap: 12px;
   width: max-content;
+  min-width: var(--board-min-width);
 }
 
 /*
  * En-tête de tableau : barre bordée au même gabarit que les panneaux de lignes
- * (même bordure de 1px), donc colonnes alignées. Reste visible au défilement vertical.
+ * (même bordure de 1px), donc colonnes alignées. Bas à angle droit : le board défile
+ * juste dessous, des coins arrondis y laisseraient apparaître les cartes.
  */
 .board-header {
-  position: sticky;
-  z-index: 2;
-  top: 0;
   display: grid;
-  grid-template-columns: repeat(var(--stage-count), var(--column-width));
-  margin-top: 4px;
+  grid-template-columns: var(--board-columns);
+  width: max-content;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 10px 10px 0 0;
   background: var(--lane-bar-bg);
-  box-shadow:
-    0 -4px 0 var(--bg),
-    var(--shadow-sm);
+  box-shadow: var(--shadow-sm);
 }
 
-/* En-tête plat : nom de l'étape et compteur, séparés comme les colonnes des lignes. */
+/*
+ * En-tête plat : nom de l'étape et compteur, séparés comme les colonnes des lignes.
+ * `position: relative` contient les textes `.sr-only` (positionnés en absolu) : sans cela,
+ * ils échapperaient à la rangée des titres et élargiraient toute la page.
+ */
 .column-header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -523,17 +734,17 @@ input:focus-visible,
     box-shadow 0.15s;
 }
 
-.column-header + .column-header {
-  border-left: 1px solid var(--border);
-}
-
 /* Les fonds d'état (glisser) épousent les coins arrondis de la barre. */
 .column-header:first-child {
-  border-radius: 9px 0 0 9px;
+  border-radius: 9px 0 0;
 }
 
 .column-header:last-child {
-  border-radius: 0 9px 9px 0;
+  border-radius: 0 9px 0 0;
+}
+
+.column-header + .column-header {
+  border-left: 1px solid var(--border);
 }
 
 /* Pendant un glisser : étapes possibles en vert (fond, titre, soulignement)… */
@@ -565,11 +776,65 @@ input:focus-visible,
   color: var(--text-h);
 }
 
-.column-tag {
-  font-size: 0.6875rem;
-  font-weight: 500;
-  font-style: italic;
-  color: var(--text-muted);
+
+/* Bandeau de phase masquée dans la barre des titres : bouton qui réaffiche la phase. */
+.column-band {
+  justify-content: center;
+  padding: 10px 4px 9px;
+  border: 0;
+  background: var(--gris-100);
+  font: inherit;
+  cursor: pointer;
+}
+
+.column-band:hover {
+  background: var(--bleu-100);
+}
+
+/* Le même bandeau dans chaque ligne : libellé vertical, sans place dans le calcul de hauteur. */
+.phase-band {
+  position: relative;
+  border-left: 1px solid var(--grid-line);
+  border-right: 1px solid var(--grid-line);
+  background: var(--gris-100);
+}
+
+.phase-band:first-child {
+  border-left: 0;
+}
+
+.phase-band-label {
+  position: absolute;
+  inset: 10px 0;
+  overflow: hidden;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: var(--band-width);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gris-600);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+/* Repère de règle (bleu) ou de rappel (gris) du statut, détaillé en infobulle. */
+.column-rule {
+  display: inline-flex;
+  align-self: center;
+  cursor: help;
+}
+
+.column-rule .ms {
+  font-size: 16px;
+}
+
+.column-rule.is-regle {
+  color: var(--bleu-600);
+}
+
+.column-rule.is-rappel {
+  color: var(--gris-600);
 }
 
 .column-count {
@@ -596,18 +861,95 @@ input:focus-visible,
 }
 
 /*
- * Archive « Terminés » : grille de cartes (largeur d'une carte de colonne), limitée à la
- * partie visible et figée à gauche, pour ne pas avoir à défiler horizontalement.
+ * Archive « Terminés » : grille de cartes (largeur d'une carte de colonne),
+ * limitée à la partie visible et figée à gauche, pour ne pas avoir à défiler horizontalement.
+ * Le collage se mesure depuis le bord intérieur du board : décalage = bordure du panneau.
  */
-.archive {
+.card-grid {
   position: sticky;
-  left: calc(var(--board-padding) + 1px);
+  left: 1px;
   display: grid;
   grid-template-columns: repeat(auto-fill, calc(var(--column-width) - 16px));
   gap: 8px;
   width: calc(100vw - 2 * var(--board-padding) - 24px);
   padding: 10px 8px;
   box-sizing: border-box;
+}
+
+/* Bandeau de rappel, en bas de l'écran, au-dessus du drawer. */
+.toast {
+  position: fixed;
+  z-index: 20;
+  bottom: 20px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  max-width: min(640px, calc(100vw - 32px));
+  padding: 10px 10px 10px 14px;
+  border: 1px solid var(--bordure);
+  border-radius: 12px;
+  background: var(--carte);
+  box-shadow: var(--ombre);
+  transform: translateX(-50%);
+}
+
+.toast-chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px 2px 8px;
+  border-radius: 999px;
+  background: var(--jaune-200);
+  color: var(--bleu-700);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.toast-chip .ms {
+  font-size: 16px;
+}
+
+.toast-text {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.toast-close {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.toast-close:hover {
+  border-color: var(--border);
+  color: var(--text-h);
+}
+
+.toast-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 8px);
 }
 
 .drawer-enter-active,
@@ -621,6 +963,8 @@ input:focus-visible,
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .toast-enter-active,
+  .toast-leave-active,
   .drawer-enter-active,
   .drawer-leave-active {
     transition: none;

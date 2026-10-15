@@ -22,7 +22,7 @@ const { isOver, handlers } = useDropZone(
 /** Précision affichée après le compteur, par type de ligne. */
 const HINTS: Record<LaneKind, string> = {
 	late: 'Dossier non validés avant CSDA visé',
-	current: '',
+	current: 'Inclut les DDS sans J0.8, en « A pré-qualifier »',
 	upcoming: '',
 	done: 'Archive des dossiers validés · « ← » ou glisser une carte pour l’invalider',
 };
@@ -34,8 +34,12 @@ const HINTS: Record<LaneKind, string> = {
 		:class="[`is-${lane.kind}`, { 'is-collapsed': collapsed }]"
 		:aria-labelledby="`lane-title-${lane.key}`"
 	>
-		<!-- Barre de titre pleine largeur ; son contenu reste visible au défilement horizontal. -->
-		<div class="lane-bar">
+		<!--
+			Barre de titre pleine largeur, cliquable partout pour replier / déplier ; son contenu
+			reste visible au défilement horizontal. Au clavier, c'est le bouton du titre : son
+			clic remonte jusqu'ici (il n'a pas de gestionnaire propre, la ligne ne bascule qu'une fois).
+		-->
+		<div class="lane-bar" @click="emit('toggle', lane.key)">
 			<header
 				class="lane-header"
 				:class="{
@@ -51,7 +55,6 @@ const HINTS: Record<LaneKind, string> = {
 						class="lane-toggle"
 						:aria-expanded="!collapsed"
 						:aria-controls="`lane-cells-${lane.key}`"
-						@click="emit('toggle', lane.key)"
 					>
 						<span class="lane-chevron" aria-hidden="true">{{ collapsed ? '▸' : '▾' }}</span>
 						<span v-if="lane.kind === 'late'" class="lane-icon" aria-hidden="true">⚠</span>
@@ -95,6 +98,13 @@ const HINTS: Record<LaneKind, string> = {
 	border-bottom: 1px solid var(--border);
 	border-radius: 11px 11px 0 0;
 	background: var(--lane-bar-bg);
+	cursor: pointer;
+	transition: background-color 0.15s;
+}
+
+/* Toute la barre réagit au survol : elle replie / déplie la ligne. */
+.lane-bar:hover {
+	background: color-mix(in srgb, var(--encre) 5%, var(--lane-bar-bg));
 }
 
 .lane.is-collapsed .lane-bar {
@@ -108,6 +118,10 @@ const HINTS: Record<LaneKind, string> = {
 	background: color-mix(in srgb, var(--warning) 16%, var(--surface));
 }
 
+.is-late .lane-bar:hover {
+	background: color-mix(in srgb, var(--warning) 22%, var(--surface));
+}
+
 /* Le gris atténué manquerait de contraste sur la barre rosée. */
 .is-late .lane-hint {
 	color: var(--text);
@@ -117,10 +131,13 @@ const HINTS: Record<LaneKind, string> = {
 	color: var(--warning);
 }
 
-/* Reste visible lors du défilement horizontal du board (marge = retrait de la barre). */
+/*
+ * Reste visible lors du défilement horizontal du board. Le collage se mesure depuis le
+ * bord intérieur du board (marge déjà exclue) : décalage = bordure du panneau + retrait de la barre.
+ */
 .lane-header {
 	position: sticky;
-	left: calc(var(--board-padding, 0px) + 12px);
+	left: 13px;
 	display: flex;
 	align-items: center;
 	gap: 10px;
@@ -183,10 +200,6 @@ const HINTS: Record<LaneKind, string> = {
 	cursor: pointer;
 }
 
-.lane-toggle:hover {
-	border-color: var(--border);
-}
-
 .lane-toggle:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 1px;
@@ -232,11 +245,14 @@ const HINTS: Record<LaneKind, string> = {
 
 .lane-cells {
 	display: grid;
-	grid-template-columns: repeat(var(--stage-count), var(--column-width));
+	/* Pistes partagées avec la barre des titres (cf. KanbanBoard, filtre Phase). */
+	grid-template-columns: var(--board-columns);
 	align-items: stretch;
 }
 
-/* « Terminés » est une archive : son contenu (cf. KanbanBoard) n'utilise pas les colonnes. */
+/*
+ * Archive « Terminés » : son contenu (cf. KanbanBoard) n'utilise pas les colonnes.
+ */
 .is-done .lane-cells {
 	display: block;
 }

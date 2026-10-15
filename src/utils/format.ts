@@ -44,8 +44,9 @@ export function formatShortDate(isoDate: string, today: string): string {
     : formatDate(isoDate)
 }
 
-/** « 1 → 7 oct. », « 29 oct. → 4 nov. » (année ajoutée comme pour `formatShortDate`). */
+/** « 1 → 7 oct. », « 29 oct. → 4 nov. », « 14 oct. » si un seul jour (année comme `formatShortDate`). */
 export function formatDayRange(start: string, end: string, today: string): string {
+  if (start === end) return formatShortDate(end, today)
   const from =
     start.slice(0, 7) === end.slice(0, 7) ? String(Number(start.slice(8))) : formatShortDate(start, today)
   return `${from} → ${formatShortDate(end, today)}`
