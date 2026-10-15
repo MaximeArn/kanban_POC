@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import type { PendingAnswer, Requirement } from '../composables/useKanban'
-import { addDays, nextWeekday, periodOf } from '../domain/periods'
-import { INTERLOCUTEURS_DS, MOTIFS_DECALAGE, PORTEURS_DECALAGE } from '../domain/referentiels'
-import { STAGE_RULES, getStage, isSessionEligible, type Dossier, type StageId } from '../domain/workflow'
-import { formatDate } from '../utils/format'
+import type { PendingAnswer, Requirement } from '~/composables/useKanban'
+import { addDays, nextWeekday, periodOf } from '~/domain/periods'
+import { INTERLOCUTEURS_DS, MOTIFS_DECALAGE, PORTEURS_DECALAGE } from '~/domain/referentiels'
+import { STAGE_RULES, getStage, isSessionEligible, type Dossier, type StageId } from '~/domain/workflow'
 
 /**
  * Règles à satisfaire avant un déplacement (spec §6.2) : une section par règle, toutes

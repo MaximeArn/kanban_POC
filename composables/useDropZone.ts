@@ -1,6 +1,3 @@
-import { computed, ref, watch } from 'vue'
-import { DND_MIME } from './useKanban'
-
 /**
  * Zone de dépôt HTML5 native (cellule, en-tête de ligne).
  * Ne pas appeler `preventDefault()` sur `dragover` = le navigateur refuse le dépôt.

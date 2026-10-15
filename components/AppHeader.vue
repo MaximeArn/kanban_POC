@@ -1,17 +1,15 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { NAV_ITEMS, getNavItem, type ViewId } from '../navigation'
-
 /**
  * Bandeau de l'application, repris de la maquette « Usine de Pilotage ».
- * Les liens pointent vers l'ancre de chaque vue (`#/ceda`) : pas de routeur, cf. App.vue.
+ * Un lien par vue (`/dds`, `/ceda`…) : routeur de Nuxt, pages dans `pages/`.
  */
-const props = defineProps<{
-  current: ViewId
-}>()
+const route = useRoute()
+
+/** Vue affichée, d'après le premier segment de l'adresse ; DDS par défaut. */
+const current = computed(() => getNavItem(route.path.split('/')[1] ?? '') ?? getNavItem('dds')!)
 
 /** La mascotte change avec la vue, comme dans la maquette. */
-const mascotte = computed(() => `/mascottes/${getNavItem(props.current).mascotte}.jpg`)
+const mascotte = computed(() => `/mascottes/${current.value.mascotte}.jpg`)
 
 /**
  * Profil de démonstration : l'architecte connecté. L'authentification se fait au niveau de
@@ -39,18 +37,18 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
     </div>
 
     <nav class="nav" aria-label="Navigation principale">
-      <a
+      <!-- NuxtLink pose aussi aria-current="page" sur le lien de la page affichée. -->
+      <NuxtLink
         v-for="item in NAV_ITEMS"
         :key="item.id"
         class="nav-item"
-        :class="{ 'is-active': item.id === current }"
-        :aria-current="item.id === current ? 'page' : undefined"
-        :href="`#/${item.id}`"
+        active-class="is-active"
+        :to="`/${item.id}`"
         :title="item.label"
       >
         <span class="ms nav-icon" aria-hidden="true">{{ item.icon }}</span>
         <span class="nav-label">{{ item.label }}</span>
-      </a>
+      </NuxtLink>
     </nav>
 
     <div class="app-bar-end">

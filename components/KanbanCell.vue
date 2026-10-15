@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import type { DropState } from '../composables/useKanban'
-import { useDropZone } from '../composables/useDropZone'
+import type { DropState } from '~/composables/useKanban'
 
 /** Intersection d'une étape (colonne) et d'une ligne : zone de dépôt des cartes. */
 const props = defineProps<{

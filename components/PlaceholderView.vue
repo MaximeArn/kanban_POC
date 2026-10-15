@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import ViewHeader from './ViewHeader.vue'
-
 /** Vue pas encore implémentée : mise en page commune (en-tête de vue) et carte d'attente, comme la maquette. */
 defineProps<{
   title: string

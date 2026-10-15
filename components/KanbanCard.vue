@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import {
   VALIDATED_STAGES,
   availableMoves,
@@ -9,10 +8,7 @@ import {
   type Dossier,
   type MoveOption,
   type StageId,
-} from '../domain/workflow'
-import { DND_MIME } from '../composables/useKanban'
-import { useToday } from '../composables/useToday'
-import { formatDelay, formatShortDate } from '../utils/format'
+} from '~/domain/workflow'
 
 const props = defineProps<{
   dossier: Dossier

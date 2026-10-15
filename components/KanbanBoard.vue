@@ -1,21 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
-import {
-  LATE_LANE,
-  useKanban,
-  type Lane,
-  type MoveResult,
-  type PendingAnswer,
-  type ToggleFilter,
-} from '../composables/useKanban'
-import { PHASES, STAGE_RULES, type Phase, type StageId } from '../domain/workflow'
-import { formatLongDate } from '../utils/format'
-import DossierDrawer from './DossierDrawer.vue'
-import KanbanCard from './KanbanCard.vue'
-import KanbanCell from './KanbanCell.vue'
-import KanbanLane from './KanbanLane.vue'
-import PendingMoveModal from './PendingMoveModal.vue'
-import ViewHeader from './ViewHeader.vue'
+import type { Lane, MoveResult, PendingAnswer, ToggleFilter } from '~/composables/useKanban'
+import { PHASES, STAGE_RULES, type Phase, type StageId } from '~/domain/workflow'
 
 const {
   filters,

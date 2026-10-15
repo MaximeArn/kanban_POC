@@ -1,5 +1,5 @@
-import { addDays, periodOf, todayIso } from '../domain/periods'
-import { ARCHITECTES_DA, AT_DATM, INTERLOCUTEURS_DS, RESSOURCES_MAE } from '../domain/referentiels'
+import { addDays, periodOf, todayIso } from '~/domain/periods'
+import { ARCHITECTES_DA, AT_DATM, INTERLOCUTEURS_DS, RESSOURCES_MAE } from '~/domain/referentiels'
 import {
   STAGES,
   VALIDATED_STAGES,
@@ -9,7 +9,7 @@ import {
   type PrioritePhase,
   type StageId,
   type Visibilite,
-} from '../domain/workflow'
+} from '~/domain/workflow'
 
 /** Champs saisis par les règles de statut : complétés plus bas, selon l’avancement de chaque DDS. */
 type DossierSource = Omit<

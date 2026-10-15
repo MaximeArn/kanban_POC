@@ -1,5 +1,5 @@
-import { readonly, ref, type Ref } from 'vue'
-import { todayIso } from '../domain/periods'
+import type { Ref } from 'vue'
+import { todayIso } from '~/domain/periods'
 
 /**
  * Date du jour (`YYYY-MM-DD`) réactive et partagée par toute l'application.

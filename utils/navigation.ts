@@ -1,6 +1,7 @@
 /**
  * Vues de l'application, reprises de la navigation de la maquette « Usine de Pilotage »
  * (ordre du profil Coordination, qui les voit toutes). Seule la vue DDS est implémentée.
+ * Chaque vue est une page Nuxt à l'adresse `/<id>` (pages/dds.vue, pages/[view].vue).
  */
 
 export type ViewId =
@@ -43,15 +44,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'reporting', label: 'Reporting Domaine', icon: 'summarize', mascotte: '03' },
 ]
 
-/** Vue ouverte au chargement, la seule implémentée pour l'instant. */
-export const DEFAULT_VIEW: ViewId = 'dds'
-
-export function getNavItem(id: ViewId): NavItem {
-  return NAV_ITEMS.find((item) => item.id === id)!
+export function isViewId(id: string): id is ViewId {
+  return NAV_ITEMS.some((item) => item.id === id)
 }
 
-/** Vue désignée par l'ancre de l'URL (`#/ceda`) ; vue par défaut si elle est absente ou inconnue. */
-export function viewFromHash(hash: string): ViewId {
-  const id = hash.replace(/^#\/?/, '')
-  return NAV_ITEMS.some((item) => item.id === id) ? (id as ViewId) : DEFAULT_VIEW
+/** Entrée de navigation d'une vue ; `undefined` pour une adresse hors navigation. */
+export function getNavItem(id: string): NavItem | undefined {
+  return NAV_ITEMS.find((item) => item.id === id)
+}
+
+/** Titre d'onglet : « DDS · Usine de Pilotage » ; nom de l'application seul sans titre de page. */
+export function pageTitle(title?: string | null): string {
+  return title ? `${title} · Usine de Pilotage` : 'Usine de Pilotage'
 }

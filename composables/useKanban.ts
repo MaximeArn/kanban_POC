@@ -1,7 +1,5 @@
-import { computed, reactive, ref } from 'vue'
-import { DOSSIERS_MOCK } from '../data/dossiers.mock'
-import { addMonths, periodOf, periodsBetween, shiftPeriod, shiftToPeriod } from '../domain/periods'
-import { useToday } from './useToday'
+import { DOSSIERS_MOCK } from '~/data/dossiers.mock'
+import { addMonths, periodOf, periodsBetween, shiftPeriod, shiftToPeriod } from '~/domain/periods'
 import {
   PHASES,
   STAGES,
@@ -20,8 +18,7 @@ import {
   type PhaseId,
   type Stage,
   type StageId,
-} from '../domain/workflow'
-import { formatDate, formatDayRange } from '../utils/format'
+} from '~/domain/workflow'
 
 /** Type MIME dédié : évite qu'une carte lâchée dans un champ texte y colle son identifiant. */
 export const DND_MIME = 'application/x-dossier-id'

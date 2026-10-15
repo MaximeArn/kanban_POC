@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import type { DropState, Lane, LaneKind } from '../composables/useKanban';
-import { useDropZone } from '../composables/useDropZone';
+import type { DropState, Lane, LaneKind } from '~/composables/useKanban';
 
 const props = defineProps<{
 	lane: Lane;

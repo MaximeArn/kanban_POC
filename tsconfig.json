@@ -1,7 +1,4 @@
 {
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ]
+  // https://nuxt.com/docs/guide/concepts/typescript — configuration générée par Nuxt dans .nuxt/
+  "extends": "./.nuxt/tsconfig.json"
 }

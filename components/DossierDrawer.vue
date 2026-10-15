@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
 import {
 	STAGES,
 	availableMoves,
@@ -15,8 +14,7 @@ import {
 	type HistoryEvent,
 	type MoveOption,
 	type StageId,
-} from '../domain/workflow';
-import { formatDate, formatDateTime } from '../utils/format';
+} from '~/domain/workflow';
 
 const props = defineProps<{
 	dossier: Dossier;
